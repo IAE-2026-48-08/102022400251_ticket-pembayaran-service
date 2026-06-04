@@ -1,1 +1,0 @@
-# 102022400251_ticker-pembayaran-service
