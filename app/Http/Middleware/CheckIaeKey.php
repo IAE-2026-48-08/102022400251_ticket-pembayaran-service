@@ -15,7 +15,6 @@ class CheckIaeKey
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Ganti dengan NIM masing-masing mahasiswa
         $nimMahasiswa = env('MY_NIM_KEY', '102022400251');
         
         if ($request->header('X-IAE-KEY') !== $nimMahasiswa) {

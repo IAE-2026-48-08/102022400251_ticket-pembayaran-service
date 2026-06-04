@@ -10,7 +10,7 @@ use OpenApi\Attributes as OA;
     version: "1.0.0",
     title: "Tickets Service API Documentation",
     description: "L5 Swagger OpenApi API Documentation for Tickets Microservice",
-    contact: new OA\Contact(email: "bayu@example.com")
+    contact: new OA\Contact(email: "bayusamudera@example.com")
 )]
 #[OA\Server(
     url: "http://localhost:8000/api",
@@ -21,7 +21,7 @@ use OpenApi\Attributes as OA;
     type: "apiKey",
     in: "header",
     name: "X-IAE-KEY",
-    description: "Enter NIM Key to access the endpoints"
+    description: "Masukkan NIM untuk mengakses endpoint"
 )]
 class TicketController extends Controller
 {
@@ -170,7 +170,6 @@ class TicketController extends Controller
     )]
     public function store(Request $request)
     {
-        // Validasi input sederhana sesuai ketentuan dosen
         $request->validate([
             'schedule_id' => 'required',
             'seat_number' => 'required'
