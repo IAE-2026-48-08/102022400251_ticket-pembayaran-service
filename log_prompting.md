@@ -149,7 +149,7 @@ Proses Bisnis: Penyelenggaraan Layanan Perjalanan dan Pemesanan Tiket Penumpang
 
 Kelompok: 12
 
-Tema Industri: Public Transport
+Tema Industri: Public Transport.
 🔄 Alur Proses Bisnis (Step-by-Step)
 
     Langkah 1: Penumpang membuka aplikasi dan mencari daftar rute serta jam keberangkatan armada yang tersedia untuk hari ini.
