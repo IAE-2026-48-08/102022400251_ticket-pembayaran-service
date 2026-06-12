@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('seat_number');
             $table->integer('total_price')->nullable();
             $table->string('status')->default('LUNAS');
+            $table->string('receipt_number')->nullable();
             $table->timestamps();
         });
     }

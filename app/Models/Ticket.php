@@ -20,6 +20,7 @@ class Ticket extends Model
         'seat_number',
         'total_price',
         'status',
+        'receipt_number',
     ];
 
     /**
