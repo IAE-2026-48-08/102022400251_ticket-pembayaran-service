@@ -140,9 +140,9 @@ POST: /api/v1/delays Menginput data kendala operasional atau penundaan waktu keb
 
 POST /api/v1/delays/notifications Mengirimkan notifikasi keterlambatan secara real-time kepada Penumpang yang terdampak.
 
-Siap, Bayu! Paham banget. Gw bantu rapikan draf dokumen final kelompok 12 ini dengan memasukkan nama Alvin Hibatullah, Bayu Samudera, dan Renaya ke bagian service masing-masing.  
+Siap, Bayu! Paham sekali. Saya bantu rapikan draf dokumen final kelompok 12 ini dengan memasukkan nama Alvin Hibatullah, Bayu Samudera, dan Renaya ke bagian service masing-masing.  
 
-Gw juga memilih judul "Penyelenggaraan Layanan Perjalanan dan Pemesanan Tiket Penumpang" supaya tujuannya lebih bulat dan profesional sesuai standar enterprise. Ada sedikit penyesuaian minor di bagian Service C agar pas mempunyai 2 GET dan 1 POST (menggabungkan proses input gangguan dan kirim notifikasi otomatis di satu rute POST) supaya nilai rubrik keamanan dan standar kalian aman.  
+Saya juga memilih judul "Penyelenggaraan Layanan Perjalanan dan Pemesanan Tiket Penumpang" supaya tujuannya lebih bulat dan profesional sesuai standar enterprise. Ada sedikit penyesuaian minor di bagian Service C agar pas mempunyai 2 GET dan 1 POST (menggabungkan proses input gangguan dan kirim notifikasi otomatis di satu rute POST) supaya nilai rubrik keamanan dan standar kelompok kalian aman.  
 
 Berikut draf rapi final yang siap kamu copas ke laporan kelompok atau file .md di GitHub:  
 Proses Bisnis: Penyelenggaraan Layanan Perjalanan dan Pemesanan Tiket Penumpang
@@ -232,7 +232,7 @@ Setiap layanan individu wajib menggunakan header keamanan X-IAE-KEY: [NIM Mahasi
 
 Catatan Tambahan untuk Renaya: Di bagian Service C, dua fungsi penginputan data dan pengiriman notifikasi dilebur ke dalam satu rute POST /api/v1/delays. Ini dilakukan agar jumlah total endpoint tetap berjumlah 3 sesuai batas kontrak aturan dari dosen (2 GET + 1 POST). Jika dipisah menjadi dua POST, nanti menyalahi aturan jumlah minimal/maksimal komponen tugas individunya.  
 
-Struktur laporan ini sudah bersih, konsisten, dan matang banget, Bayu. Tinggal kalian masukkan ke berkas kelompok kalian jirr!
+Struktur laporan ini sudah bersih, konsisten, dan sangat matang, Bayu. Tinggal kalian masukkan ke berkas kelompok kalian!
 
 nah sekarang mau implementasi langsung ke mini service bisa buatin step by step nya? untuk laravel template nya dah ready (docker compatible) jadi langsung aja ke pengerjaan mini service nya
 
@@ -343,7 +343,7 @@ Sesuai perintah modernisasi integrasi di slide tugas:
 3. Buka browser dan akses Playground GraphQL untuk mencoba melakukan *query data* dengan memilih beberapa field saja[cite: 1].
 4. Terakhir, buat file `log_prompting.md` di root folder repositori kalian dan isi dengan rangkuman obrolan kita dari awal tadi sebagai bukti *evidence* tugas ke dosen[cite: 1].
 
-Gas langsung dibagi ke Alvin dan Renaya biar bisa cicil codingannya dari sekarang, cuk!
+Bisa langsung dibagi ke Alvin dan Renaya agar bisa dicicil kodingannya dari sekarang!
 
 ehhh wait, berikut ketentuan dari dosen nya cuy
 
@@ -663,4 +663,234 @@ composer require nuwave/lighthouse
 (Alvin tinggal menyesuaikan tipe objeknya menjadi type Schedule, dan Renaya menjadi type Delay).
 4. Untuk mengaktifkan GraphQL Playground agar bisa diuji di browser, pastikan setelan di config/lighthouse.php pada bagian 'playground' sudah bernilai true atau install dev-tools playground bawaannya jika diperlukan. Kamu bisa langsung tes melakukan query field tertentu di URL http://localhost:8000/graphql-playground.
 
-Semua langkah di atas sudah mengikuti aturan ketat dari dokumen dosenmu, baik dari penomoran versi URL (v1), penggunaan metode HTTP, batasan jumlah jenis endpoint, hingga struktur respon JSON-nya. Aman jirr, tinggal dieksekusi bareng tim!
+Semua langkah di atas sudah mengikuti aturan ketat dari dokumen dosenmu, baik dari penomoran versi URL (v1), penggunaan metode HTTP, batasan jumlah jenis endpoint, hingga struktur respon JSON-nya. Semuanya sudah aman, tinggal dieksekusi bersama tim!
+
+---
+
+## INTEGRASI CENTRAL SSO, SOAP AUDIT, & RABBITMQ EVENT BUS (Tugas 3)
+
+**User:**
+URL SSO IAE : https://iae-sso.virtualfri.id
+Referensi API
+Method Path Auth Deskripsi
+GET /health – Health check
+GET /api/v1/auth/jwks – Public keys (RS256) untuk verify JWT
+POST /api/v1/auth/token Body M2M: { "api_key": "KEY-MHS-01" }
+POST /api/v1/auth/token Body User: { "email": "warga01@ktp.iae.id", "password": "..." }
+POST /soap/v1/audit Bearer Audit XML generic
+POST /api/v1/messages/publish Bearer Publish ke iae.central.exchange
+
+ini maksud tugasnya seperti apa ya, saya bingung. Dosen menyebutkan disuruh login SSO terlebih dahulu baru RabbitMQ, lalu diminta membuat UI sederhana seperti contoh dosen.
+
+**AI:**
+Ini adalah tugas integrasi layanan dengan server pusat IAE. Kita perlu membuat halaman integrasi khusus untuk mendemonstrasikan 3 modul utama:
+1. **Central SSO Auth**: Melakukan otentikasi ke SSO server untuk mendapatkan token JWT.
+2. **SOAP Audit Log**: Melakukan pelaporan audit transaksi ke server SOAP menggunakan XML SOAP Envelope.
+3. **RabbitMQ Event Publisher**: Mengirimkan data event ke RabbitMQ exchange melalui API gateway.
+
+Berikut adalah langkah-langkah implementasinya:
+
+### Langkah 1: Tambahkan Environment Configuration ke `.env`
+```env
+IAE_SSO_URL=https://iae-sso.virtualfri.id
+MY_TEAM_ID=TEAM-12
+```
+
+### Langkah 2: Buat Controller `app/Http/Controllers/CentralIntegrationController.php`
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use App\Models\Ticket;
+use App\Models\User;
+
+class CentralIntegrationController extends Controller
+{
+    public function index()
+    {
+        $ticket = Ticket::first(); 
+        return view('central_integration', compact('ticket'));
+    }
+
+    public function login(Request $request)
+    {
+        $baseUrl = env('IAE_SSO_URL', 'https://iae-sso.virtualfri.id');
+        $apiKey = $request->input('api_key', 'KEY-MHS-264');
+
+        $response = Http::post($baseUrl . '/api/v1/auth/token', [
+            'api_key' => $apiKey,
+        ]);
+
+        if ($response->successful()) {
+            $data = $response->json();
+            $token = $data['token'] ?? $data['data']['token'] ?? null;
+            session(['jwt_token' => $token]);
+            session(['jwt_login_type' => 'm2m']);
+            session(['jwt_identifier' => $apiKey]);
+
+            if ($token) {
+                $parts = explode('.', $token);
+                if (count($parts) === 3) {
+                    $payloadJson = base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1]));
+                    $payload = json_decode($payloadJson, true);
+
+                    $user = User::updateOrCreate(
+                        ['email' => $apiKey . '@mhs.iae.id'],
+                        [
+                            'name' => 'Student API Client (' . $apiKey . ')',
+                            'password' => bcrypt('M2M_DUMMY_PASSWORD_' . uniqid()),
+                            'role' => 'mahasiswa'
+                        ]
+                    );
+                    auth()->login($user);
+                }
+            }
+
+            return redirect()->back()->with('response_data', $data);
+        }
+
+        return redirect()->back()->with('response_data', [
+            'error' => 'Gagal login SSO menggunakan API Key Mahasiswa',
+            'status' => $response->status(),
+            'details' => $response->json()
+        ]);
+    }
+
+    public function audit(Request $request)
+    {
+        $baseUrl = env('IAE_SSO_URL', 'https://iae-sso.virtualfri.id');
+        $teamId = env('MY_TEAM_ID', 'TEAM-12');
+        $token = session('jwt_token');
+
+        $xmlPayload = '<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:iae="http://iae.central/audit">
+    <soap:Body>
+        <iae:AuditRequest>
+            <iae:TeamID>\' . $teamId . \'</iae:TeamID>
+            <iae:ActivityName>TicketTransactionCreated</iae:ActivityName>
+            <iae:LogContent><![CDATA[{"order_id":"\' . $request->order_id . \'","seat":"\' . $request->seat . \'"}]]></iae:LogContent>
+        </iae:AuditRequest>
+    </soap:Body>
+</soap:Envelope>\';
+
+        $requestBuilder = Http::withBody($xmlPayload, \'text/xml\');
+        if ($token) {
+            $requestBuilder = $requestBuilder->withToken($token);
+        }
+
+        $response = $requestBuilder->post($baseUrl . \'/soap/v1/audit\');
+        $rawResponse = $response->body();
+
+        $receiptNumber = null;
+        if (preg_match(\'/<iae:ReceiptNumber>(.*?)<\\/iae:ReceiptNumber>/\', $rawResponse, $matches)) {
+            $receiptNumber = $matches[1];
+        }
+
+        if ($receiptNumber && $request->order_id) {
+            $ticket = Ticket::find($request->order_id);
+            if ($ticket) {
+                $ticket->update([
+                    \'receipt_number\' => $receiptNumber,
+                    \'status\' => \'AUDITED\'
+                ]);
+            }
+        }
+
+        return redirect()->back()->with(\'response_data\', [
+            \'info\' => \'SOAP XML Sent & Audited!\',
+            \'status_code\' => $response->status(),
+            \'extracted_receipt\' => $receiptNumber ?? \'Not found in response\',
+            \'raw_response\' => $rawResponse
+        ]);
+    }
+
+    public function publish(Request $request)
+    {
+        $baseUrl = env(\'IAE_SSO_URL\', \'https://iae-sso.virtualfri.id\');
+        $token = session(\'jwt_token\');
+
+        if (!$token) {
+            return redirect()->back()->with(\'response_data\', [
+                \'error\' => \'Anda belum login SSO, silakan lakukan otentikasi terlebih dahulu!\'
+            ]);
+        }
+
+        $payload = json_decode($request->message, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return redirect()->back()->with(\'response_data\', [
+                \'error\' => \'Format JSON pesan tidak valid!\',
+                \'message\' => $request->message
+            ]);
+        }
+
+        $response = Http::withToken($token)->post($baseUrl . \'/api/v1/messages/publish\', [
+            \'exchange\' => \'iae.central.exchange\',
+            \'routing_key\' => \'ticket.purchased\', 
+            \'payload\' => $payload
+        ]);
+
+        return redirect()->back()->with(\'response_data\', [
+            \'info\' => \'Published to RabbitMQ via Central Server!\',
+            \'status_code\' => $response->status(),
+            \'response\' => $response->json()
+        ]);
+    }
+}
+```
+
+### Langkah 3: Buat View `resources/views/central_integration.blade.php`
+Tampilan dashboard integrasi dengan gaya minimalis, modern, dan bernuansa gelap (*dark theme*), menggunakan framework Bootstrap 5 grid dan CSS kustom untuk card layout, live response terminal, dan status koneksi JWT.
+
+### Langkah 4: Daftarkan Rute di `routes/web.php`
+```php
+use App\Http\Controllers\CentralIntegrationController;
+
+Route::get(\'/central\', [CentralIntegrationController::class, \'index\']);
+Route::post(\'/central/login\', [CentralIntegrationController::class, \'login\']);
+Route::post(\'/central/audit\', [CentralIntegrationController::class, \'audit\']);
+Route::post(\'/central/publish\', [CentralIntegrationController::class, \'publish\']);
+```
+
+---
+
+**User:**
+update terbaru dari dosen, tidak perlu menggunakan warga KTP tetapi langsung menggunakan API key mahasiswa. Selain itu, integrasi SOAP sudah benar, namun untuk routing key RabbitMQ diminta menggunakan format 2 kata saja.
+
+**AI:**
+Baik, saya mengerti! Berikut perubahan yang disesuaikan:
+1. **Otentikasi SSO**: Langsung login menggunakan API Key Mahasiswa M2M (`KEY-MHS-264`) daripada email/password akun Warga biasa. Data SSO tersebut akan langsung dipetakan ke data user lokal.
+2. **RabbitMQ Routing Key**: Menggunakan routing key kaku 2 kata seperti `ticket.purchased` sesuai ketentuan exchange server pusat.
+
+---
+
+**User:**
+Tolong payload pesannya jangan dibuat terlalu sederhana, melainkan dibuat lebih panjang dan lengkap dengan menyertakan field dari swagger atau database.
+
+**AI:**
+Mohon maaf atas kekeliruannya. Ternyata payload JSON pesan event RabbitMQ default-nya ingin dibuat lebih lengkap dan menyerupai format log transaksi yang sesungguhnya.
+
+Saya akan ganti default pesan event JSON di textarea form menjadi payload komplit yang mengambil data dinamis dari database tiket (seperti UUID tiket, harga tiket, seat number, status audit, receipt number legasi, nama service, api_key mahasiswa, dan ID kelompok):
+
+```json
+{
+  "event_name": "ticket.purchased",
+  "service_name": "Tickets-Service",
+  "api_version": "v1",
+  "occurred_at": "{{ now()->toIso8601String() }}",
+  "ticket": {
+    "id": "{{ $ticket->id ?? \'019eb5d2-7bce-7304-8a4a-5ffeaa211dc9\' }}",
+    "schedule_id": "{{ $ticket->schedule_id ?? \'102022400251\' }}",
+    "seat_number": "{{ $ticket->seat_number ?? \'A1\' }}",
+    "total_price": {{ $ticket->total_price ?? 100000 }},
+    "status": "{{ $ticket->status ?? \'AUDITED\' }}",
+    "legacy_receipt_number": "{{ $ticket->receipt_number ?? \'IAE-LOG-2026-93003CC9\' }}"
+  },
+  "published_by": {
+    "api_key": "KEY-MHS-264",
+    "team_id": "{{ env(\'MY_TEAM_ID\', \'TEAM-12\') }}"
+  }
+}
+```

@@ -9,40 +9,34 @@ use App\Models\User;
 
 class CentralIntegrationController extends Controller
 {
-    // Tampilkan halaman utama UI dengan data tiket riil dari DB
     public function index()
     {
         $ticket = Ticket::first(); 
         return view('central_integration', compact('ticket'));
     }
 
-    // 1. KOTAK CENTRAL SSO (Menggunakan M2M API Key Mahasiswa sesuai arahan dosen)
     public function login(Request $request)
     {
         $baseUrl = env('IAE_SSO_URL', 'https://iae-sso.virtualfri.id');
         $apiKey = $request->input('api_key', 'KEY-MHS-264');
 
-        // M2M Login: kirim body API Key mahasiswa agar dicatat di sistem dosen
         $response = Http::post($baseUrl . '/api/v1/auth/token', [
             'api_key' => $apiKey,
         ]);
 
         if ($response->successful()) {
             $data = $response->json();
-            // Simpan token JWT ke session
             $token = $data['token'] ?? $data['data']['token'] ?? null;
             session(['jwt_token' => $token]);
             session(['jwt_login_type' => 'm2m']);
             session(['jwt_identifier' => $apiKey]);
 
-            // Decode JWT Payload & Map ke Database Lokal
             if ($token) {
                 $parts = explode('.', $token);
                 if (count($parts) === 3) {
                     $payloadJson = base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1]));
                     $payload = json_decode($payloadJson, true);
 
-                    // Buat/update user system khusus untuk login M2M API Key Mahasiswa
                     $user = User::updateOrCreate(
                         ['email' => $apiKey . '@mhs.iae.id'],
                         [
@@ -65,14 +59,12 @@ class CentralIntegrationController extends Controller
         ]);
     }
 
-    // 2. KOTAK AUDIT SYSTEM (SOAP XML - Menyimpan ReceiptNumber)
     public function audit(Request $request)
     {
         $baseUrl = env('IAE_SSO_URL', 'https://iae-sso.virtualfri.id');
         $teamId = env('MY_TEAM_ID', 'TEAM-12');
         $token = session('jwt_token');
 
-        // Transformasi JSON data ke format XML Envelope kaku
         $xmlPayload = '<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:iae="http://iae.central/audit">
     <soap:Body>
@@ -92,7 +84,6 @@ class CentralIntegrationController extends Controller
         $response = $requestBuilder->post($baseUrl . '/soap/v1/audit');
         $rawResponse = $response->body();
 
-        // Tangkap & Simpan ReceiptNumber dari respon XML Dosen
         $receiptNumber = null;
         if (preg_match('/<iae:ReceiptNumber>(.*?)<\/iae:ReceiptNumber>/', $rawResponse, $matches)) {
             $receiptNumber = $matches[1];
@@ -116,7 +107,6 @@ class CentralIntegrationController extends Controller
         ]);
     }
 
-    // 3. KOTAK MESSAGE BROKER (AMQP Publisher via Dosen Rest Proxy)
     public function publish(Request $request)
     {
         $baseUrl = env('IAE_SSO_URL', 'https://iae-sso.virtualfri.id');
@@ -124,7 +114,7 @@ class CentralIntegrationController extends Controller
 
         if (!$token) {
             return redirect()->back()->with('response_data', [
-                'error' => 'Lu belum login SSO mbut, ambil Kalung Emas JWT dulu di Kotak 1!'
+                'error' => 'Anda belum login SSO, silakan lakukan otentikasi terlebih dahulu!'
             ]);
         }
 
@@ -136,8 +126,6 @@ class CentralIntegrationController extends Controller
             ]);
         }
 
-        // Tembak REST proxy RabbitMQ Dosen
-        // Menggunakan routing key 2 kata: ticket.purchased
         $response = Http::withToken($token)->post($baseUrl . '/api/v1/messages/publish', [
             'exchange' => 'iae.central.exchange',
             'routing_key' => 'ticket.purchased', 
