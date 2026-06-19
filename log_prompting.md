@@ -894,3 +894,102 @@ Saya akan ganti default pesan event JSON di textarea form menjadi payload kompli
   }
 }
 ```
+
+ Dear all, untuk menyesuaikan beberapa hal, saya menambahkan kewajiban penambahan “nim” pada request body untuk request ke SSO M2M ya. curl -s -X POST http://localhost:8080/api/v1/auth/token \ -H "Content-Type: application/json" \ -d '{"api_key":"KEY-MHS-45","nim":"102022400033"}'tolong disesuaikan agar bisa hit dan mendapatkan token baik yang sebelumnya sudah berhasil atau belum
+
+
+buatin step by step nya tolong 
+
+📌 Deskripsi Perubahan
+
+Sesuai dengan pembaruan instruksi, request body untuk mendapatkan token JWT melalui jalur M2M pada endpoint /api/v1/auth/token kini wajib menyertakan parameter nim di samping parameter api_key yang sudah ada sebelumnya. Oleh karena itu, antarmuka (UI) dan logika controller pada mini-service Tiket & Pembayaran perlu disesuaikan.
+🛠️ Langkah Demi Langkah Penyesuaian Sistem
+Langkah 1: Memperbarui Antarmuka Login (UI)
+
+Buka berkas komponen tampilan halaman web Anda pada jalur resources/views/central_integration.blade.php. Ubah formulir masukan (input form) pada bagian Central SSO Login agar menerima input berupa api_key dan nim (bukan lagi email dan password warga).
+
+Ganti struktur <form> pada bagian tersebut dengan kode berikut:
+HTML
+
+<!-- 1. KOTAK CENTRAL SSO (M2M STYLE DENGAN VALIDASI NIM) -->
+<div class="col-md-4">
+    <div class="card p-4 h-100">
+        <h4 class="text-primary mb-3">🔵 1. Central SSO Login</h4>
+        <p class="small text-muted">Mendapatkan Token JWT menggunakan API Key dan NIM sesuai dengan instruksi terbaru.</p>
+        
+        @if(session('jwt_token'))
+            <div class="alert alert-success p-2 small">✓ Token JWT Berhasil Tersimpan di Session!</div>
+        @endif
+
+        <form action="/central/login" method="POST">
+            @csrf
+            <div class="mb-3">
+                <label class="form-label small">API Key Kelompok</label>
+                <!-- Sesuaikan nilai value dengan API Key jatah kelompok Anda, contoh: KEY-MHS-12 -->
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="api_key" value="KEY-MHS-12" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small">NIM Mahasiswa</label>
+                <!-- Masukkan NIM anggota kelompok yang bertindak sebagai pemroses transaksi -->
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="nim" value="102022400285" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Ambil Token JWT</button>
+        </form>
+    </div>
+</div>
+
+Langkah 2: Memperbarui Logika Fungsi pada Controller Backend
+
+Buka berkas controller Anda pada jalur app/Http/Controllers/CentralIntegrationController.php. Perbarui fungsi login agar menyusun request body dalam format JSON yang mengandung objek api_key dan nim sebelum melakukan panggilan HTTP POST ke server pusat.
+
+Ubah isi fungsi public function login(Request $request) dengan implementasi berikut:
+PHP
+
+// 1. PROSES AUTENTIKASI CENTRAL SSO (M2M DENGAN ATURAN BARU)
+public function login(Request $request)
+{
+    $baseUrl = env('IAE_SSO_URL', 'https://iae-sso.virtualfri.id');
+
+    // Melakukan request POST ke server pusat dengan payload api_key dan nim
+    $response = Http::withHeaders([
+        'Content-Type' => 'application/json'
+    ])->post($baseUrl . '/api/v1/auth/token', [
+        'api_key' => $request->api_key,
+        'nim' => $request->nim,
+    ]);
+
+    if ($response->successful()) {
+        $data = $response->json();
+        
+        // Mengekstrak properti token dari struktur response JSON server pusat
+        $token = $data['token'] ?? $data['data']['token'] ?? null;
+        
+        // Menyimpan token ke dalam session internal aplikasi
+        session(['jwt_token' => $token]);
+        
+        return redirect()->back()->with('response_data', [
+            'status' => 'Sukses Mendapatkan Token JWT!',
+            'token_saved' => $token ? 'Yes' : 'No',
+            'raw_response' => $data
+        ]);
+    }
+
+    return redirect()->back()->with('response_data', [
+        'error' => 'Gagal melakukan otentikasi SSO M2M', 
+        'status_code' => $response->status(),
+        'details' => $response->json() ?? $response->body()
+    ]);
+}
+
+Langkah 3: Eksekusi dan Pengujian Integrasi
+
+Setelah perubahan kode di atas disimpan, lakukan langkah pengujian berikut:
+
+    Pastikan container Docker Anda tetap berjalan dalam kondisi aktif. Jika diperlukan refresh konfigurasi, jalankan perintah berikut pada terminal:
+
+docker-compose up -d
+
+2. Akses halaman integrasi melalui peramban (*browser*) pada alamat: `http://localhost:8000/central`.
+3. Periksa komponen pada **Kotak 1**, pastikan kolom input telah berubah menjadi masukan **API Key** dan **NIM**.
+4. Tekan tombol **"Ambil Token JWT"** untuk menguji konektivitas baru.
+5. Setelah respons sukses diterima dari server pusat, Anda dapat melanjutkan pengujian pada **Kotak 2
