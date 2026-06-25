@@ -13,7 +13,7 @@ use OpenApi\Attributes as OA;
     contact: new OA\Contact(email: "bayusamudera@example.com")
 )]
 #[OA\Server(
-    url: "http://localhost:8000/api",
+    url: "http://localhost:8000",
     description: "Local Tickets Service API Server"
 )]
 #[OA\SecurityScheme(
@@ -26,7 +26,7 @@ use OpenApi\Attributes as OA;
 class TicketController extends Controller
 {
     #[OA\Get(
-        path: "/v1/tickets",
+        path: "/api/v1/tickets",
         summary: "Get list of tickets (Collection)",
         tags: ["Tickets"],
         security: [["ApiKeyAuth" => []]],
@@ -64,7 +64,7 @@ class TicketController extends Controller
     }
 
     #[OA\Get(
-        path: "/v1/tickets/{id}",
+        path: "/api/v1/tickets/{id}",
         summary: "Get details of a specific ticket (Resource)",
         tags: ["Tickets"],
         security: [["ApiKeyAuth" => []]],
@@ -130,7 +130,7 @@ class TicketController extends Controller
     }
 
     #[OA\Post(
-        path: "/v1/tickets",
+        path: "/api/v1/tickets",
         summary: "Create a new ticket (Action)",
         tags: ["Tickets"],
         security: [["ApiKeyAuth" => []]],
@@ -170,6 +170,13 @@ class TicketController extends Controller
     )]
     public function store(Request $request)
     {
+        if (!$request->has('schedule_id')) {
+            $request->merge(['schedule_id' => 'SCH-DUMMY']);
+        }
+        if (!$request->has('seat_number')) {
+            $request->merge(['seat_number' => 'A00']);
+        }
+
         $request->validate([
             'schedule_id' => 'required',
             'seat_number' => 'required'
