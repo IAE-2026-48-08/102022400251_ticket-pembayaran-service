@@ -100,7 +100,7 @@ class TicketController extends Controller
                 )
             ),
             new OA\Response(
-                response: 503,
+                response: 404,
                 description: "Resource not found",
                 content: new OA\JsonContent(
                     properties: [
@@ -124,7 +124,7 @@ class TicketController extends Controller
                 'status' => 'error',
                 'message' => 'Resource not found',
                 'errors' => null
-            ], 503);
+            ], 404);
         }
 
         return response()->json([

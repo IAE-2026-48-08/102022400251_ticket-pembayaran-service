@@ -185,7 +185,7 @@
                             }
                         }
                     },
-                    "503": {
+                    "404": {
                         "description": "Resource not found",
                         "content": {
                             "application/json": {
