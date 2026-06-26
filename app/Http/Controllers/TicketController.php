@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Ticket;
 use Illuminate\Http\Request;
 use OpenApi\Attributes as OA;
+use App\Services\Iae\IaeAuditClient;
+use App\Services\Iae\IaePublisher;
 
 #[OA\Info(
     version: "1.0.0",
@@ -13,7 +15,7 @@ use OpenApi\Attributes as OA;
     contact: new OA\Contact(email: "bayusamudera@example.com")
 )]
 #[OA\Server(
-    url: "http://localhost:8000/api",
+    url: "http://localhost/api",
     description: "Local Tickets Service API Server"
 )]
 #[OA\SecurityScheme(
@@ -21,7 +23,14 @@ use OpenApi\Attributes as OA;
     type: "apiKey",
     in: "header",
     name: "X-IAE-KEY",
-    description: "Masukkan NIM untuk mengakses endpoint"
+    description: "Masukkan API Key (NIM: 102022400251)"
+)]
+#[OA\SecurityScheme(
+    securityScheme: "bearerAuth",
+    type: "http",
+    scheme: "bearer",
+    bearerFormat: "JWT",
+    description: "Masukkan Token JWT SSO untuk mengakses endpoint"
 )]
 class TicketController extends Controller
 {
@@ -29,7 +38,7 @@ class TicketController extends Controller
         path: "/v1/tickets",
         summary: "Get list of tickets (Collection)",
         tags: ["Tickets"],
-        security: [["ApiKeyAuth" => []]],
+        security: [["bearerAuth" => [], "ApiKeyAuth" => []]],
         responses: [
             new OA\Response(
                 response: 200,
@@ -45,7 +54,7 @@ class TicketController extends Controller
             ),
             new OA\Response(
                 response: 401,
-                description: "Unauthorized - Invalid X-IAE-KEY"
+                description: "Unauthorized - Invalid Token or X-IAE-KEY"
             )
         ]
     )]
@@ -67,7 +76,7 @@ class TicketController extends Controller
         path: "/v1/tickets/{id}",
         summary: "Get details of a specific ticket (Resource)",
         tags: ["Tickets"],
-        security: [["ApiKeyAuth" => []]],
+        security: [["bearerAuth" => [], "ApiKeyAuth" => []]],
         parameters: [
             new OA\Parameter(
                 name: "id",
@@ -133,13 +142,13 @@ class TicketController extends Controller
         path: "/v1/tickets",
         summary: "Create a new ticket (Action)",
         tags: ["Tickets"],
-        security: [["ApiKeyAuth" => []]],
+        security: [["bearerAuth" => [], "ApiKeyAuth" => []]],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
                 required: ["schedule_id", "seat_number"],
                 properties: [
-                    new OA\Property(property: "schedule_id", type: "string", example: "SCH-12345"),
+                    new OA\Property(property: "schedule_id", type: "string", example: "1"),
                     new OA\Property(property: "seat_number", type: "string", example: "A12"),
                     new OA\Property(property: "total_price", type: "integer", example: 75000, nullable: true)
                 ]
@@ -168,12 +177,31 @@ class TicketController extends Controller
             )
         ]
     )]
-    public function store(Request $request)
+    public function store(Request $request, IaeAuditClient $audit, IaePublisher $publisher)
     {
         $request->validate([
             'schedule_id' => 'required',
             'seat_number' => 'required'
         ]);
+
+        // Verifikasi schedule_id ke Rute-Jadwal Service secara internal via REST API
+        $token = $request->bearerToken();
+        try {
+            $response = \Illuminate\Support\Facades\Http::withToken($token)
+                ->timeout(5)
+                ->get("http://rute-jadwal-app/api/v1/schedules/{$request->schedule_id}");
+
+            if ($response->failed()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Jadwal (schedule_id) tidak valid atau tidak ditemukan di Rute-Jadwal Service.',
+                    'errors' => null
+                ], 404);
+            }
+        } catch (\Throwable $e) {
+            // Jika service Rute-Jadwal offline, catat error tapi tetap izinkan/sesuaikan toleransi fallback
+            report($e);
+        }
 
         $ticket = new Ticket();
         $ticket->schedule_id = $request->schedule_id;
@@ -182,13 +210,62 @@ class TicketController extends Controller
         $ticket->status = 'LUNAS';
         $ticket->save();
 
+        $receipt = null;
+        try {
+            $result = $audit->audit('TicketTransactionCreated', [
+                'event'          => 'ticket.purchased',
+                'ticket_id'      => $ticket->id,
+                'schedule_id'    => $ticket->schedule_id,
+                'seat_number'    => $ticket->seat_number,
+                'total_price'    => $ticket->total_price,
+                'actor'          => $request->attributes->get('iae_subject'),
+            ]);
+            $receipt = $result['receipt'];
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        if ($receipt) {
+            $ticket->receipt_number = $receipt;
+            $ticket->status = 'AUDITED';
+            $ticket->save();
+        }
+
+        try {
+            $publisher->publish([
+                'event_name'            => 'ticket.purchased',
+                'service_name'          => 'Tickets-Service',
+                'api_version'           => 'v1',
+                'occurred_at'           => now()->toIso8601String(),
+                'ticket' => [
+                    'id'                    => $ticket->id,
+                    'schedule_id'           => $ticket->schedule_id,
+                    'seat_number'           => $ticket->seat_number,
+                    'total_price'           => $ticket->total_price,
+                    'status'                => $ticket->status,
+                    'legacy_receipt_number' => $receipt,
+                ],
+                'published_by' => [
+                    'api_key' => config('services.iae.api_key'),
+                    'team_id' => config('services.iae.team_id'),
+                ],
+                'approved_by'           => [
+                    'sso_subject' => $request->attributes->get('iae_subject'),
+                    'role'        => $request->attributes->get('iae_role'),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return response()->json([
             'status' => 'success',
             'message' => 'Resource created successfully',
             'data' => $ticket,
             'meta' => [
                 'service_name' => 'Tickets-Service',
-                'api_version' => 'v1'
+                'api_version' => 'v1',
+                'audit_receipt' => $receipt,
             ]
         ], 201);
     }

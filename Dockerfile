@@ -1,9 +1,9 @@
-FROM php:8.2-fpm
+FROM php:8.2-apache
 
 # Set working directory
-WORKDIR /var/www
+WORKDIR /var/www/html
 
-# Install system dependencies
+# Install system dependencies & PHP extensions
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -15,32 +15,35 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     libjpeg-dev \
     libfreetype6-dev \
-    default-mysql-client
+    && rm -rf /var/lib/apt/lists/*
 
-# Clear cache
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Configure and install GD extension
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg
-RUN docker-php-ext-install pdo_mysql mbstring zip exif pcntl bcmath gd
+# Configure and install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo mbstring zip exif pcntl bcmath gd
 
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy existing application directory contents
-COPY . /var/www
+# Enable Apache mod_rewrite
+RUN a2enmod rewrite
 
-# Copy existing application directory permissions
-COPY --chown=www-data:www-data . /var/www
+# Set Apache document root to Laravel /public
+ENV APACHE_DOCUMENT_ROOT /var/www/html/public
+RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
+RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
-# Adjust permissions for storage and bootstrap/cache
-RUN chmod -R 775 /var/www/storage /var/www/bootstrap/cache
+# Copy project files with correct permissions
+COPY --chown=www-data:www-data . /var/www/html
 
-# Fix line endings of entrypoint script and make it executable
-RUN sed -i 's/\r$//' /var/www/docker/entrypoint.sh && chmod +x /var/www/docker/entrypoint.sh
+# Install Composer dependencies
+ENV COMPOSER_ALLOW_SUPERUSER 1
+RUN composer install --no-interaction --optimize-autoloader \
+    && chown -R www-data:www-data /var/www/html
 
-# Set entrypoint
-ENTRYPOINT ["/var/www/docker/entrypoint.sh"]
+# Adjust entrypoint permissions and fix line endings
+RUN sed -i 's/\r$//' /var/www/html/docker/entrypoint.sh && chmod +x /var/www/html/docker/entrypoint.sh
 
-EXPOSE 9000
-CMD ["php-fpm"]
+# Set entrypoint and CMD
+ENTRYPOINT ["/var/www/html/docker/entrypoint.sh"]
+EXPOSE 80
+CMD ["apache2-foreground"]
