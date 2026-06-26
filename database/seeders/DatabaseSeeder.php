@@ -20,12 +20,16 @@ class DatabaseSeeder extends Seeder
             'email' => 'test@example.com',
         ]);
 
-        for ($i = 0; $i < 5; $i++) {
+        $statuses = ['LUNAS', 'PENDING', 'AUDITED'];
+        for ($i = 0; $i < 50; $i++) {
+            $row = chr(65 + ($i % 5)); // A, B, C, D, E
+            $number = ($i % 10) + 1; // 1 to 10
             \App\Models\Ticket::create([
-                'schedule_id' => (string)(102022400251 + $i),
-                'seat_number' => 'A' . ($i + 1),
-                'total_price' => 100000 + ($i * 15000),
-                'status' => 'LUNAS',
+                'schedule_id' => 'SCH-' . (1000 + $i),
+                'seat_number' => $row . $number,
+                'total_price' => 50000 + (($i * 3500) % 150000),
+                'status' => $statuses[$i % count($statuses)],
+                'receipt_number' => ($i % 3 === 2) ? 'REC-' . (20260000 + $i) : null,
             ]);
         }
     }

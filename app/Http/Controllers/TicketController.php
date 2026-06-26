@@ -15,7 +15,7 @@ use App\Services\Iae\IaePublisher;
     contact: new OA\Contact(email: "bayusamudera@example.com")
 )]
 #[OA\Server(
-    url: "http://localhost/api",
+    url: "http://localhost:8000",
     description: "Local Tickets Service API Server"
 )]
 #[OA\SecurityScheme(
@@ -35,7 +35,7 @@ use App\Services\Iae\IaePublisher;
 class TicketController extends Controller
 {
     #[OA\Get(
-        path: "/v1/tickets",
+        path: "/api/v1/tickets",
         summary: "Get list of tickets (Collection)",
         tags: ["Tickets"],
         security: [["bearerAuth" => [], "ApiKeyAuth" => []]],
@@ -73,7 +73,7 @@ class TicketController extends Controller
     }
 
     #[OA\Get(
-        path: "/v1/tickets/{id}",
+        path: "/api/v1/tickets/{id}",
         summary: "Get details of a specific ticket (Resource)",
         tags: ["Tickets"],
         security: [["bearerAuth" => [], "ApiKeyAuth" => []]],
@@ -100,7 +100,7 @@ class TicketController extends Controller
                 )
             ),
             new OA\Response(
-                response: 404,
+                response: 503,
                 description: "Resource not found",
                 content: new OA\JsonContent(
                     properties: [
@@ -124,7 +124,7 @@ class TicketController extends Controller
                 'status' => 'error',
                 'message' => 'Resource not found',
                 'errors' => null
-            ], 404);
+            ], 503);
         }
 
         return response()->json([
@@ -139,7 +139,7 @@ class TicketController extends Controller
     }
 
     #[OA\Post(
-        path: "/v1/tickets",
+        path: "/api/v1/tickets",
         summary: "Create a new ticket (Action)",
         tags: ["Tickets"],
         security: [["bearerAuth" => [], "ApiKeyAuth" => []]],
@@ -179,6 +179,13 @@ class TicketController extends Controller
     )]
     public function store(Request $request, IaeAuditClient $audit, IaePublisher $publisher)
     {
+        if (!$request->has('schedule_id')) {
+            $request->merge(['schedule_id' => 'SCH-DUMMY']);
+        }
+        if (!$request->has('seat_number')) {
+            $request->merge(['seat_number' => 'A00']);
+        }
+
         $request->validate([
             'schedule_id' => 'required',
             'seat_number' => 'required'

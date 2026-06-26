@@ -10,18 +10,18 @@
     },
     "servers": [
         {
-            "url": "http://localhost/api",
+            "url": "http://localhost:8000",
             "description": "Local Tickets Service API Server"
         }
     ],
     "paths": {
-        "/v1/tickets": {
+        "/api/v1/tickets": {
             "get": {
                 "tags": [
                     "Tickets"
                 ],
                 "summary": "Get list of tickets (Collection)",
-                "operationId": "b24862a7465a2e305137ed018318c559",
+                "operationId": "b406702bcd80642f4b5c83c1bf20105b",
                 "responses": {
                     "200": {
                         "description": "List of tickets retrieved successfully",
@@ -68,7 +68,7 @@
                     "Tickets"
                 ],
                 "summary": "Create a new ticket (Action)",
-                "operationId": "e444e16ae5a817b1d9dfab4a0a8c05da",
+                "operationId": "80fbef860b264eed3bc3ccd90d8ddc8b",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -140,13 +140,13 @@
                 ]
             }
         },
-        "/v1/tickets/{id}": {
+        "/api/v1/tickets/{id}": {
             "get": {
                 "tags": [
                     "Tickets"
                 ],
                 "summary": "Get details of a specific ticket (Resource)",
-                "operationId": "0b452e6cf7f3247299550c350fbf88ed",
+                "operationId": "596302276f442d583400ce2abf22cb00",
                 "parameters": [
                     {
                         "name": "id",
@@ -185,7 +185,7 @@
                             }
                         }
                     },
-                    "404": {
+                    "503": {
                         "description": "Resource not found",
                         "content": {
                             "application/json": {
